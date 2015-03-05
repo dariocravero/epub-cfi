@@ -10722,361 +10722,359 @@ var TerminusError = function (terminusType, terminusCondition, message) {
 module.exports = TerminusError
 
 },{}],7:[function(require,module,exports){
-var $ = require('jquery')
-var Instructions = require('./instructions')
-var NodeTypeError = require('./errors/node-type')
-var OutOfRangeError = require('./errors/out-of-range')
+var $ = require('jquery');
+var Instructions = require('./instructions');
+var NodeTypeError = require('./errors/node-type');
+var OutOfRangeError = require('./errors/out-of-range');
 
 var Generator = {
 
-    // ------------------------------------------------------------------------------------ //
-    //  "PUBLIC" METHODS (THE API)                                                          //
-    // ------------------------------------------------------------------------------------ //
-
-    generateCharOffsetRangeComponent : function (rangeStartElement, startOffset, rangeEndElement, endOffset, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var docRange;
-        var commonAncestor;
-        var range1OffsetStep;
-        var range1CFI;
-        var range2OffsetStep;
-        var range2CFI;
-        var commonCFIComponent;
-
-        this.validateStartTextNode(rangeStartElement);
-        this.validateStartTextNode(rangeEndElement);
-
-        // Parent element is the same
-        if ($(rangeStartElement).parent()[0] === $(rangeEndElement).parent()[0]) {
-            range1OffsetStep = this.createCFITextNodeStep($(rangeStartElement), startOffset, classBlacklist, elementBlacklist, idBlacklist);
-            range2OffsetStep = this.createCFITextNodeStep($(rangeEndElement), endOffset, classBlacklist, elementBlacklist, idBlacklist);          
-            commonCFIComponent = this.createCFIElementSteps($(rangeStartElement).parent(), "html", classBlacklist, elementBlacklist, idBlacklist);
-            return commonCFIComponent.substring(1, commonCFIComponent.length) + "," + range1OffsetStep + "," + range2OffsetStep;
-        }
-        else {
-
-            // Create a document range to find the common ancestor
-            docRange = document.createRange();
-            docRange.setStart(rangeStartElement, startOffset);
-            docRange.setEnd(rangeEndElement, endOffset);
-            commonAncestor = docRange.commonAncestorContainer;
-
-            // Generate terminating offset and range 1
-            range1OffsetStep = this.createCFITextNodeStep($(rangeStartElement), startOffset, classBlacklist, elementBlacklist, idBlacklist);
-            range1CFI = this.createCFIElementSteps($(rangeStartElement).parent(), commonAncestor, classBlacklist, elementBlacklist, idBlacklist) + range1OffsetStep;
-
-            // Generate terminating offset and range 2
-            range2OffsetStep = this.createCFITextNodeStep($(rangeEndElement), endOffset, classBlacklist, elementBlacklist, idBlacklist);
-            range2CFI = this.createCFIElementSteps($(rangeEndElement).parent(), commonAncestor, classBlacklist, elementBlacklist, idBlacklist) + range2OffsetStep;
-
-            // Generate shared component
-            commonCFIComponent = this.createCFIElementSteps($(commonAncestor), "html", classBlacklist, elementBlacklist, idBlacklist);
-
-            // Return the result
-            return commonCFIComponent.substring(1, commonCFIComponent.length) + "," + range1CFI + "," + range2CFI;
-        }
-    },
-
-    generateElementRangeComponent : function (rangeStartElement, rangeEndElement, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var docRange;
-        var commonAncestor;
-        var range1CFI;
-        var range2CFI;
-        var commonCFIComponent;
-
-        this.validateStartElement(rangeStartElement);
-        this.validateStartElement(rangeEndElement);
-
-        if (rangeStartElement === rangeEndElement) {
-            throw new Error("Start and end element cannot be the same for a CFI range");
-        }
-
-        // Create a document range to find the common ancestor
-        docRange = document.createRange();
-        docRange.setStart(rangeStartElement, 0);
-        docRange.setEnd(rangeEndElement, rangeEndElement.childNodes.length);
-        commonAncestor = docRange.commonAncestorContainer;
-
-        // Generate range 1
-        range1CFI = this.createCFIElementSteps($(rangeStartElement), commonAncestor, classBlacklist, elementBlacklist, idBlacklist);
-
-        // Generate range 2
-        range2CFI = this.createCFIElementSteps($(rangeEndElement), commonAncestor, classBlacklist, elementBlacklist, idBlacklist);
-
-        // Generate shared component
-        commonCFIComponent = this.createCFIElementSteps($(commonAncestor), "html", classBlacklist, elementBlacklist, idBlacklist);
-
-        // Return the result
-        return commonCFIComponent.substring(1, commonCFIComponent.length) + "," + range1CFI + "," + range2CFI;
-    },
-
-    // Description: Generates a character offset CFI 
-    // Arguments: The text node that contains the offset referenced by the cfi, the offset value, the name of the 
-    //   content document that contains the text node, the package document for this EPUB.
-    generateCharacterOffsetCFIComponent : function (startTextNode, characterOffset, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var textNodeStep;
-        var contentDocCFI;
-        var $itemRefStartNode;
-        var packageDocCFI;
-
-        this.validateStartTextNode(startTextNode, characterOffset);
-
-        // Create the text node step
-        textNodeStep = this.createCFITextNodeStep($(startTextNode), characterOffset, classBlacklist, elementBlacklist, idBlacklist);
-
-        // Call the recursive method to create all the steps up to the head element of the content document (the "html" element)
-        contentDocCFI = this.createCFIElementSteps($(startTextNode).parent(), "html", classBlacklist, elementBlacklist, idBlacklist) + textNodeStep;
-        return contentDocCFI.substring(1, contentDocCFI.length);
-    },
-
-    generateElementCFIComponent : function (startElement, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var contentDocCFI;
-        var $itemRefStartNode;
-        var packageDocCFI;
-
-        this.validateStartElement(startElement);
-
-        // Call the recursive method to create all the steps up to the head element of the content document (the "html" element)
-        contentDocCFI = this.createCFIElementSteps($(startElement), "html", classBlacklist, elementBlacklist, idBlacklist);
-
-        // Remove the ! 
-        return contentDocCFI.substring(1, contentDocCFI.length);
-    },
-
-    generatePackageDocumentCFIComponent : function (contentDocumentName, packageDocument, classBlacklist, elementBlacklist, idBlacklist) {
-
-        this.validateContentDocumentName(contentDocumentName);
-        this.validatePackageDocument(packageDocument, contentDocumentName);
-
-        // Get the start node (itemref element) that references the content document
-        $itemRefStartNode = $("itemref[idref='" + contentDocumentName + "']", $(packageDocument));
-
-        // Create the steps up to the top element of the package document (the "package" element)
-        packageDocCFIComponent = this.createCFIElementSteps($itemRefStartNode, "package", classBlacklist, elementBlacklist, idBlacklist);
-
-        // Append an !; this assumes that a CFI content document CFI component will be appended at some point
-        return packageDocCFIComponent + "!";
-    },
-
-    generatePackageDocumentCFIComponentWithSpineIndex : function (spineIndex, packageDocument, classBlacklist, elementBlacklist, idBlacklist) {
-
-        // Get the start node (itemref element) that references the content document
-        $itemRefStartNode = $($("spine", packageDocument).children()[spineIndex]);
-
-        // Create the steps up to the top element of the package document (the "package" element)
-        packageDocCFIComponent = this.createCFIElementSteps($itemRefStartNode, "package", classBlacklist, elementBlacklist, idBlacklist);
-
-        // Append an !; this assumes that a CFI content document CFI component will be appended at some point
-        return packageDocCFIComponent + "!";
-    },
-
-    generateCompleteCFI : function (packageDocumentCFIComponent, contentDocumentCFIComponent) {
-
-        return "epubcfi(" + packageDocumentCFIComponent + contentDocumentCFIComponent + ")";  
-    },
-
-    // ------------------------------------------------------------------------------------ //
-    //  "PRIVATE" HELPERS                                                                   //
-    // ------------------------------------------------------------------------------------ //
-
-    validateStartTextNode : function (startTextNode, characterOffset) {
-        
-        // Check that the text node to start from IS a text node
-        if (!startTextNode) {
-            throw new NodeTypeError(startTextNode, "Cannot generate a character offset from a starting point that is not a text node");
-        } else if (startTextNode.nodeType != 3) {
-            throw new NodeTypeError(startTextNode, "Cannot generate a character offset from a starting point that is not a text node");
-        }
-
-        // Check that the character offset is within a valid range for the text node supplied
-        if (characterOffset < 0) {
-            throw new OutOfRangeError(characterOffset, 0, "Character offset cannot be less than 0");
-        }
-        else if (characterOffset > startTextNode.nodeValue.length) {
-            throw new OutOfRangeError(characterOffset, startTextNode.nodeValue.length - 1, "character offset cannot be greater than the length of the text node");
-        }
-    },
-
-    validateStartElement : function (startElement) {
-
-        if (!startElement) {
-            throw new NodeTypeError(startElement, "CFI target element is undefined");
-        }
-
-        if (!(startElement.nodeType && startElement.nodeType === 1)) {
-            throw new NodeTypeError(startElement, "CFI target element is not an HTML element");
-        }
-    },
-
-    validateContentDocumentName : function (contentDocumentName) {
-
-        // Check that the idref for the content document has been provided
-        if (!contentDocumentName) {
-            throw new Error("The idref for the content document, as found in the spine, must be supplied");
-        }
-    },
-
-    validatePackageDocument : function (packageDocument, contentDocumentName) {
-        
-        // Check that the package document is non-empty and contains an itemref element for the supplied idref
-        if (!packageDocument) {
-            throw new Error("A package document must be supplied to generate a CFI");
-        }
-        else if ($($("itemref[idref='" + contentDocumentName + "']", packageDocument)[0]).length === 0) {
-            throw new Error("The idref of the content document could not be found in the spine");
-        }
-    },
-
-    // Description: Creates a CFI terminating step to a text node, with a character offset
-    // REFACTORING CANDIDATE: Some of the parts of this method could be refactored into their own methods
-    createCFITextNodeStep : function ($startTextNode, characterOffset, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var $parentNode;
-        var $contentsExcludingMarkers;
-        var CFIIndex;
-        var indexOfTextNode;
-        var preAssertion;
-        var preAssertionStartIndex;
-        var textLength;
-        var postAssertion;
-        var postAssertionEndIndex;
-
-        // Find text node position in the set of child elements, ignoring any blacklisted elements 
-        $parentNode = $startTextNode.parent();
-        $contentsExcludingMarkers = Instructions.applyBlacklist($parentNode.contents(), classBlacklist, elementBlacklist, idBlacklist);
-
-        // Find the text node index in the parent list, inferring nodes that were originally a single text node
-        var prevNodeWasTextNode;
-        var indexOfFirstInSequence;
-        var textNodeOnlyIndex = 0;
-        var characterOffsetSinceUnsplit = 0;
-        var finalCharacterOffsetInSequence = 0;
-        $.each($contentsExcludingMarkers, 
-            function (index) {
-
-                // If this is a text node, check if it matches and return the current index
-                if (this.nodeType === Node.TEXT_NODE) {
-
-                    if (this === $startTextNode[0]) {
-
-                        // Set index as the first in the adjacent sequence of text nodes, or as the index of the current node if this 
-                        //   node is a standard one sandwiched between two element nodes. 
-                        if (prevNodeWasTextNode) {
-                            indexOfTextNode = indexOfFirstInSequence;
-                            finalCharacterOffsetInSequence = characterOffsetSinceUnsplit;
-                        }
-                        else {
-                            indexOfTextNode = textNodeOnlyIndex;
-                        }
-                        
-                        // Break out of .each loop
-                        return false; 
-                    }
-
-                    // Save this index as the first in sequence of adjacent text nodes, if it is not already set by this point
-                    prevNodeWasTextNode = true;
-                    characterOffsetSinceUnsplit = characterOffsetSinceUnsplit + this.length
-                    if (indexOfFirstInSequence === undefined) {
-                        indexOfFirstInSequence = textNodeOnlyIndex;
-                        textNodeOnlyIndex = textNodeOnlyIndex + 1;
-                    }
-                }
-                // This node is not a text node
-                else {
-                    prevNodeWasTextNode = false;
-                    indexOfFirstInSequence = undefined;
-                    characterOffsetSinceUnsplit  = 0;
-                }
-            }
-        );
-
-        // Convert the text node index to a CFI odd-integer representation
-        CFIIndex = (indexOfTextNode * 2) + 1;
-
-        // TODO: text assertions are not in the grammar yet, I think, or they're just causing problems. This has
-        //   been temporarily removed. 
-
-        // Add pre- and post- text assertions
-        // preAssertionStartIndex = (characterOffset - 3 >= 0) ? characterOffset - 3 : 0;
-        // preAssertion = $startTextNode[0].nodeValue.substring(preAssertionStartIndex, characterOffset);
-
-        // textLength = $startTextNode[0].nodeValue.length;
-        // postAssertionEndIndex = (characterOffset + 3 <= textLength) ? characterOffset + 3 : textLength;
-        // postAssertion = $startTextNode[0].nodeValue.substring(characterOffset, postAssertionEndIndex);
-
-        // Gotta infer the correct character offset, as well
-
-        // Return the constructed CFI text node step
-        return "/" + CFIIndex + ":" + (finalCharacterOffsetInSequence + characterOffset);
-         // + "[" + preAssertion + "," + postAssertion + "]";
-    },
-
-    createCFIElementSteps : function ($currNode, topLevelElement, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var $blacklistExcluded;
-        var $parentNode;
-        var currNodePosition;
-        var CFIPosition;
-        var idAssertion;
-        var elementStep; 
-
-        // Find position of current node in parent list
-        $blacklistExcluded = Instructions.applyBlacklist($currNode.parent().children(), classBlacklist, elementBlacklist, idBlacklist);
-        $.each($blacklistExcluded, 
-            function (index, value) {
-
-                if (this === $currNode[0]) {
-
-                    currNodePosition = index;
-
-                    // Break loop
-                    return false;
-                }
-        });
-
-        // Convert position to the CFI even-integer representation
-        CFIPosition = (currNodePosition + 1) * 2;
-
-        // Create CFI step with id assertion, if the element has an id
-        if ($currNode.attr("id")) {
-            elementStep = "/" + CFIPosition + "[" + $currNode.attr("id") + "]";
-        }
-        else {
-            elementStep = "/" + CFIPosition;
-        }
-
-        // If a parent is an html element return the (last) step for this content document, otherwise, continue.
-        //   Also need to check if the current node is the top-level element. This can occur if the start node is also the
-        //   top level element.
-        $parentNode = $currNode.parent();
-        if ($parentNode.is(topLevelElement) || $currNode.is(topLevelElement)) {
-            
-            // If the top level node is a type from which an indirection step, add an indirection step character (!)
-            // REFACTORING CANDIDATE: It is possible that this should be changed to: if (topLevelElement = 'package') do
-            //   not return an indirection character. Every other type of top-level element may require an indirection
-            //   step to navigate to, thus requiring that ! is always prepended. 
-            if (topLevelElement === 'html') {
-                return "!" + elementStep;
-            }
-            else {
-                return elementStep;
-            }
-        }
-        else {
-            return this.createCFIElementSteps($parentNode, topLevelElement, classBlacklist, elementBlacklist, idBlacklist) + elementStep;
-        }
+  // ------------------------------------------------------------------------------------ //
+  //  "PUBLIC" METHODS (THE API)                                                          //
+  // ------------------------------------------------------------------------------------ //
+
+  generateCharOffsetRangeComponent: function (rangeStartElement, startOffset, rangeEndElement, endOffset, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var docRange;
+    var commonAncestor;
+    var range1OffsetStep;
+    var range1CFI;
+    var range2OffsetStep;
+    var range2CFI;
+    var commonCFIComponent;
+
+    this.validateStartTextNode(rangeStartElement);
+    this.validateStartTextNode(rangeEndElement);
+
+    // Parent element is the same
+    if ($(rangeStartElement).parent()[0] === $(rangeEndElement).parent()[0]) {
+      range1OffsetStep = this.createCFITextNodeStep($(rangeStartElement), startOffset, classBlacklist, elementBlacklist, idBlacklist);
+      range2OffsetStep = this.createCFITextNodeStep($(rangeEndElement), endOffset, classBlacklist, elementBlacklist, idBlacklist);          
+      commonCFIComponent = this.createCFIElementSteps($(rangeStartElement).parent(), "html", classBlacklist, elementBlacklist, idBlacklist);
+      return commonCFIComponent.substring(1, commonCFIComponent.length) + "," + range1OffsetStep + "," + range2OffsetStep;
     }
+    else {
+
+      // Create a document range to find the common ancestor
+      docRange = document.createRange();
+      docRange.setStart(rangeStartElement, startOffset);
+      docRange.setEnd(rangeEndElement, endOffset);
+      commonAncestor = docRange.commonAncestorContainer;
+
+      // Generate terminating offset and range 1
+      range1OffsetStep = this.createCFITextNodeStep($(rangeStartElement), startOffset, classBlacklist, elementBlacklist, idBlacklist);
+      range1CFI = this.createCFIElementSteps($(rangeStartElement).parent(), commonAncestor, classBlacklist, elementBlacklist, idBlacklist) + range1OffsetStep;
+
+      // Generate terminating offset and range 2
+      range2OffsetStep = this.createCFITextNodeStep($(rangeEndElement), endOffset, classBlacklist, elementBlacklist, idBlacklist);
+      range2CFI = this.createCFIElementSteps($(rangeEndElement).parent(), commonAncestor, classBlacklist, elementBlacklist, idBlacklist) + range2OffsetStep;
+
+      // Generate shared component
+      commonCFIComponent = this.createCFIElementSteps($(commonAncestor), "html", classBlacklist, elementBlacklist, idBlacklist);
+
+      // Return the result
+      return commonCFIComponent.substring(1, commonCFIComponent.length) + "," + range1CFI + "," + range2CFI;
+    }
+  },
+
+  generateElementRangeComponent: function (rangeStartElement, rangeEndElement, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var docRange;
+    var commonAncestor;
+    var range1CFI;
+    var range2CFI;
+    var commonCFIComponent;
+
+    this.validateStartElement(rangeStartElement);
+    this.validateStartElement(rangeEndElement);
+
+    if (rangeStartElement === rangeEndElement) {
+      throw new Error("Start and end element cannot be the same for a CFI range");
+    }
+
+    // Create a document range to find the common ancestor
+    docRange = document.createRange();
+    docRange.setStart(rangeStartElement, 0);
+    docRange.setEnd(rangeEndElement, rangeEndElement.childNodes.length);
+    commonAncestor = docRange.commonAncestorContainer;
+
+    // Generate range 1
+    range1CFI = this.createCFIElementSteps($(rangeStartElement), commonAncestor, classBlacklist, elementBlacklist, idBlacklist);
+
+    // Generate range 2
+    range2CFI = this.createCFIElementSteps($(rangeEndElement), commonAncestor, classBlacklist, elementBlacklist, idBlacklist);
+
+    // Generate shared component
+    commonCFIComponent = this.createCFIElementSteps($(commonAncestor), "html", classBlacklist, elementBlacklist, idBlacklist);
+
+    // Return the result
+    return commonCFIComponent.substring(1, commonCFIComponent.length) + "," + range1CFI + "," + range2CFI;
+  },
+
+  // Description: Generates a character offset CFI 
+  // Arguments: The text node that contains the offset referenced by the cfi, the offset value, the name of the 
+  //   content document that contains the text node, the package document for this EPUB.
+  generateCharacterOffsetCFIComponent: function (startTextNode, characterOffset, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var textNodeStep;
+    var contentDocCFI;
+    var $itemRefStartNode;
+    var packageDocCFI;
+
+    this.validateStartTextNode(startTextNode, characterOffset);
+
+    // Create the text node step
+    textNodeStep = this.createCFITextNodeStep($(startTextNode), characterOffset, classBlacklist, elementBlacklist, idBlacklist);
+
+    // Call the recursive method to create all the steps up to the head element of the content document (the "html" element)
+    contentDocCFI = this.createCFIElementSteps($(startTextNode).parent(), "html", classBlacklist, elementBlacklist, idBlacklist) + textNodeStep;
+    return contentDocCFI.substring(1, contentDocCFI.length);
+  },
+
+  generateElementCFIComponent: function (startElement, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var contentDocCFI;
+    var $itemRefStartNode;
+    var packageDocCFI;
+
+    this.validateStartElement(startElement);
+
+    // Call the recursive method to create all the steps up to the head element of the content document (the "html" element)
+    contentDocCFI = this.createCFIElementSteps($(startElement), "html", classBlacklist, elementBlacklist, idBlacklist);
+
+    // Remove the ! 
+    return contentDocCFI.substring(1, contentDocCFI.length);
+  },
+
+  generatePackageDocumentCFIComponent: function (contentDocumentName, packageDocument, classBlacklist, elementBlacklist, idBlacklist) {
+
+    this.validateContentDocumentName(contentDocumentName);
+    this.validatePackageDocument(packageDocument, contentDocumentName);
+
+    // Get the start node (itemref element) that references the content document
+    $itemRefStartNode = $("itemref[idref='" + contentDocumentName + "']", $(packageDocument));
+
+    // Create the steps up to the top element of the package document (the "package" element)
+    packageDocCFIComponent = this.createCFIElementSteps($itemRefStartNode, "package", classBlacklist, elementBlacklist, idBlacklist);
+
+    // Append an !; this assumes that a CFI content document CFI component will be appended at some point
+    return packageDocCFIComponent + "!";
+  },
+
+  generatePackageDocumentCFIComponentWithSpineIndex: function (spineIndex, packageDocument, classBlacklist, elementBlacklist, idBlacklist) {
+
+    // Get the start node (itemref element) that references the content document
+    $itemRefStartNode = $($("spine", packageDocument).children()[spineIndex]);
+
+    // Create the steps up to the top element of the package document (the "package" element)
+    packageDocCFIComponent = this.createCFIElementSteps($itemRefStartNode, "package", classBlacklist, elementBlacklist, idBlacklist);
+
+    // Append an !; this assumes that a CFI content document CFI component will be appended at some point
+    return packageDocCFIComponent + "!";
+  },
+
+  generateCompleteCFI: function (packageDocumentCFIComponent, contentDocumentCFIComponent) {
+
+    return "epubcfi(" + packageDocumentCFIComponent + contentDocumentCFIComponent + ")";  
+  },
+
+  // ------------------------------------------------------------------------------------ //
+  //  "PRIVATE" HELPERS                                                                   //
+  // ------------------------------------------------------------------------------------ //
+
+  validateStartTextNode: function (startTextNode, characterOffset) {
+
+    // Check that the text node to start from IS a text node
+    if (!startTextNode) {
+      throw new NodeTypeError(startTextNode, "Cannot generate a character offset from a starting point that is not a text node");
+    } else if (startTextNode.nodeType != 3) {
+      throw new NodeTypeError(startTextNode, "Cannot generate a character offset from a starting point that is not a text node");
+    }
+
+    // Check that the character offset is within a valid range for the text node supplied
+    if (characterOffset < 0) {
+      throw new OutOfRangeError(characterOffset, 0, "Character offset cannot be less than 0");
+    }
+    else if (characterOffset > startTextNode.nodeValue.length) {
+      throw new OutOfRangeError(characterOffset, startTextNode.nodeValue.length - 1, "character offset cannot be greater than the length of the text node");
+    }
+  },
+
+  validateStartElement: function (startElement) {
+
+    if (!startElement) {
+      throw new NodeTypeError(startElement, "CFI target element is undefined");
+    }
+
+    if (!(startElement.nodeType && startElement.nodeType === 1)) {
+      throw new NodeTypeError(startElement, "CFI target element is not an HTML element");
+    }
+  },
+
+  validateContentDocumentName: function (contentDocumentName) {
+
+    // Check that the idref for the content document has been provided
+    if (!contentDocumentName) {
+      throw new Error("The idref for the content document, as found in the spine, must be supplied");
+    }
+  },
+
+  validatePackageDocument: function (packageDocument, contentDocumentName) {
+
+    // Check that the package document is non-empty and contains an itemref element for the supplied idref
+    if (!packageDocument) {
+      throw new Error("A package document must be supplied to generate a CFI");
+    }
+    else if ($($("itemref[idref='" + contentDocumentName + "']", packageDocument)[0]).length === 0) {
+      throw new Error("The idref of the content document could not be found in the spine");
+    }
+  },
+
+  // Description: Creates a CFI terminating step to a text node, with a character offset
+  // REFACTORING CANDIDATE: Some of the parts of this method could be refactored into their own methods
+  createCFITextNodeStep: function ($startTextNode, characterOffset, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var $parentNode;
+    var $contentsExcludingMarkers;
+    var CFIIndex;
+    var indexOfTextNode;
+    var preAssertion;
+    var preAssertionStartIndex;
+    var textLength;
+    var postAssertion;
+    var postAssertionEndIndex;
+
+    // Find text node position in the set of child elements, ignoring any blacklisted elements 
+    $parentNode = $startTextNode.parent();
+    $contentsExcludingMarkers = Instructions.applyBlacklist($parentNode.contents(), classBlacklist, elementBlacklist, idBlacklist);
+
+    // Find the text node index in the parent list, inferring nodes that were originally a single text node
+    var prevNodeWasTextNode;
+    var indexOfFirstInSequence;
+    var textNodeOnlyIndex = 0;
+    var characterOffsetSinceUnsplit = 0;
+    var finalCharacterOffsetInSequence = 0;
+    $.each($contentsExcludingMarkers, 
+           function (index) {
+
+             // If this is a text node, check if it matches and return the current index
+             if (this.nodeType === Node.TEXT_NODE) {
+
+               if (this === $startTextNode[0]) {
+
+                 // Set index as the first in the adjacent sequence of text nodes, or as the index of the current node if this 
+                 //   node is a standard one sandwiched between two element nodes. 
+                 if (prevNodeWasTextNode) {
+                   indexOfTextNode = indexOfFirstInSequence;
+                   finalCharacterOffsetInSequence = characterOffsetSinceUnsplit;
+                 }
+                 else {
+                   indexOfTextNode = textNodeOnlyIndex;
+                 }
+
+                 // Break out of .each loop
+                 return false; 
+               }
+
+               // Save this index as the first in sequence of adjacent text nodes, if it is not already set by this point
+               prevNodeWasTextNode = true;
+               characterOffsetSinceUnsplit = characterOffsetSinceUnsplit + this.length
+               if (indexOfFirstInSequence === undefined) {
+                 indexOfFirstInSequence = textNodeOnlyIndex;
+                 textNodeOnlyIndex = textNodeOnlyIndex + 1;
+               }
+             }
+             // This node is not a text node
+             else {
+               prevNodeWasTextNode = false;
+               indexOfFirstInSequence = undefined;
+               characterOffsetSinceUnsplit  = 0;
+             }
+           }
+          );
+
+          // Convert the text node index to a CFI odd-integer representation
+          CFIIndex = (indexOfTextNode * 2) + 1;
+
+          // TODO: text assertions are not in the grammar yet, I think, or they're just causing problems. This has
+          //   been temporarily removed. 
+
+          // Add pre- and post- text assertions
+          // preAssertionStartIndex = (characterOffset - 3 >= 0) ? characterOffset - 3 : 0;
+          // preAssertion = $startTextNode[0].nodeValue.substring(preAssertionStartIndex, characterOffset);
+
+          // textLength = $startTextNode[0].nodeValue.length;
+          // postAssertionEndIndex = (characterOffset + 3 <= textLength) ? characterOffset + 3 : textLength;
+          // postAssertion = $startTextNode[0].nodeValue.substring(characterOffset, postAssertionEndIndex);
+
+          // Gotta infer the correct character offset, as well
+
+          // Return the constructed CFI text node step
+          return "/" + CFIIndex + ":" + (finalCharacterOffsetInSequence + characterOffset);
+          // + "[" + preAssertion + "," + postAssertion + "]";
+  },
+
+  createCFIElementSteps: function ($currNode, topLevelElement, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var $blacklistExcluded;
+    var $parentNode;
+    var currNodePosition;
+    var CFIPosition;
+    var idAssertion;
+    var elementStep; 
+
+    // Find position of current node in parent list
+    $blacklistExcluded = Instructions.applyBlacklist($currNode.parent().children(), classBlacklist, elementBlacklist, idBlacklist);
+    $.each($blacklistExcluded, function (index, value) {
+      if (this === $currNode[0]) {
+
+        currNodePosition = index;
+
+        // Break loop
+        return false;
+      }
+    });
+
+    // Convert position to the CFI even-integer representation
+    CFIPosition = (currNodePosition + 1) * 2;
+
+    // Create CFI step with id assertion, if the element has an id
+    if ($currNode.attr("id")) {
+      elementStep = "/" + CFIPosition + "[" + $currNode.attr("id") + "]";
+    }
+    else {
+      elementStep = "/" + CFIPosition;
+    }
+
+    // If a parent is an html element return the (last) step for this content document, otherwise, continue.
+    //   Also need to check if the current node is the top-level element. This can occur if the start node is also the
+    //   top level element.
+    $parentNode = $currNode.parent();
+    if ($parentNode.is(topLevelElement) || $currNode.is(topLevelElement)) {
+
+      // If the top level node is a type from which an indirection step, add an indirection step character (!)
+      // REFACTORING CANDIDATE: It is possible that this should be changed to: if (topLevelElement = 'package') do
+      //   not return an indirection character. Every other type of top-level element may require an indirection
+      //   step to navigate to, thus requiring that ! is always prepended. 
+      if (topLevelElement === 'html') {
+        return "!" + elementStep;
+      }
+      else {
+        return elementStep;
+      }
+    }
+    else {
+      return this.createCFIElementSteps($parentNode, topLevelElement, classBlacklist, elementBlacklist, idBlacklist) + elementStep;
+    }
+  }
 };
 
-module.exports = Generator
+module.exports = Generator;
 
 },{"./errors/node-type":4,"./errors/out-of-range":5,"./instructions":9,"jquery":1}],8:[function(require,module,exports){
-var generator     = require('./generator');
-var instructions  = require('./instructions');
-var interpreter   = require('./interpreter');
+var generator = require('./generator');
+var instructions = require('./instructions');
+var interpreter = require('./interpreter');
 
 function generateCharacterOffsetCFIComponent(startTextNode, characterOffset, classBlacklist, elementBlacklist, idBlacklist) {
   return generator.generateCharacterOffsetCFIComponent(startTextNode, characterOffset, classBlacklist, elementBlacklist, idBlacklist);
@@ -11154,343 +11152,344 @@ module.exports = {
   injectElement: injectElement,
   injectElementAtOffset: injectElementAtOffset,
   injectRangeElements: injectRangeElements
-}
+};
 
 },{"./generator":7,"./instructions":9,"./interpreter":10}],9:[function(require,module,exports){
 // Description: This model contains the implementation for "instructions" included in the EPUB CFI domain specific language (DSL). 
 //   Lexing and parsing a CFI produces a set of executable instructions for processing a CFI (represented in the AST). 
 //   This object contains a set of functions that implement each of the executable instructions in the AST. 
 
-var NodeTypeError = require('./errors/node-type')
-var OutOfRangeError = require('./errors/out-of-range')
-var TerminusError = require('./errors/terminus')
+var $ = require('jquery');
+var NodeTypeError = require('./errors/node-type');
+var OutOfRangeError = require('./errors/out-of-range');
+var TerminusError = require('./errors/terminus');
 
 var Instructions = {
 
-	// ------------------------------------------------------------------------------------ //
-	//  "PUBLIC" METHODS (THE API)                                                          //
-	// ------------------------------------------------------------------------------------ //
+  // ------------------------------------------------------------------------------------ //
+  //  "PUBLIC" METHODS (THE API)                                                          //
+  // ------------------------------------------------------------------------------------ //
 
-	// Description: Follows a step
-	// Rationale: The use of children() is important here, as this jQuery method returns a tree of xml nodes, EXCLUDING
-	//   CDATA and text nodes. When we index into the set of child elements, we are assuming that text nodes have been 
-	//   excluded.
-	// REFACTORING CANDIDATE: This should be called "followIndexStep"
-	getNextNode : function (CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist) {
+  // Description: Follows a step
+  // Rationale: The use of children() is important here, as this jQuery method returns a tree of xml nodes, EXCLUDING
+  //   CDATA and text nodes. When we index into the set of child elements, we are assuming that text nodes have been 
+  //   excluded.
+  // REFACTORING CANDIDATE: This should be called "followIndexStep"
+  getNextNode: function(CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist) {
 
-		// Find the jquery index for the current node
-		var $targetNode;
-		if (CFIStepValue % 2 == 0) {
+    // Find the jquery index for the current node
+    var $targetNode;
+    if (CFIStepValue % 2 == 0) {
 
-			$targetNode = this.elementNodeStep(CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist);
-		}
-		else {
+      $targetNode = this.elementNodeStep(CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist);
+    }
+    else {
 
-			$targetNode = this.inferTargetTextNode(CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist);
-		}
+      $targetNode = this.inferTargetTextNode(CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist);
+    }
 
-		return $targetNode;
-	},
+    return $targetNode;
+  },
 
-	// Description: This instruction executes an indirection step, where a resource is retrieved using a 
-	//   link contained on a attribute of the target element. The attribute that contains the link differs
-	//   depending on the target. 
-	// Note: Iframe indirection will (should) fail if the iframe is not from the same domain as its containing script due to 
-	//   the cross origin security policy
-	followIndirectionStep : function (CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist) {
+  // Description: This instruction executes an indirection step, where a resource is retrieved using a 
+  //   link contained on a attribute of the target element. The attribute that contains the link differs
+  //   depending on the target. 
+  // Note: Iframe indirection will (should) fail if the iframe is not from the same domain as its containing script due to 
+  //   the cross origin security policy
+  followIndirectionStep: function(CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist) {
 
-		var that = this;
-		var $contentDocument; 
-		var $blacklistExcluded;
-		var $startElement;
-		var $targetNode;
+    var that = this;
+    var $contentDocument; 
+    var $blacklistExcluded;
+    var $startElement;
+    var $targetNode;
 
-		// TODO: This check must be expanded to all the different types of indirection step
-		// Only expects iframes, at the moment
-		if ($currNode === undefined || !$currNode.is("iframe")) {
+    // TODO: This check must be expanded to all the different types of indirection step
+    // Only expects iframes, at the moment
+    if ($currNode === undefined || !$currNode.is("iframe")) {
 
-			throw NodeTypeError($currNode, "expected an iframe element");
-		}
+      throw NodeTypeError($currNode, "expected an iframe element");
+    }
 
-		// Check node type; only iframe indirection is handled, at the moment
-		if ($currNode.is("iframe")) {
+    // Check node type; only iframe indirection is handled, at the moment
+    if ($currNode.is("iframe")) {
 
-			// Get content
-			$contentDocument = $currNode.contents();
+      // Get content
+      $contentDocument = $currNode.contents();
 
-			// Go to the first XHTML element, which will be the first child of the top-level document object
-			$blacklistExcluded = this.applyBlacklist($contentDocument.children(), classBlacklist, elementBlacklist, idBlacklist);
-			$startElement = $($blacklistExcluded[0]);
+      // Go to the first XHTML element, which will be the first child of the top-level document object
+      $blacklistExcluded = this.applyBlacklist($contentDocument.children(), classBlacklist, elementBlacklist, idBlacklist);
+      $startElement = $($blacklistExcluded[0]);
 
-			// Follow an index step
-			$targetNode = this.getNextNode(CFIStepValue, $startElement, classBlacklist, elementBlacklist, idBlacklist);
+      // Follow an index step
+      $targetNode = this.getNextNode(CFIStepValue, $startElement, classBlacklist, elementBlacklist, idBlacklist);
 
-			// Return that shit!
-			return $targetNode; 
-		}
+      // Return that shit!
+      return $targetNode; 
+    }
 
-		// TODO: Other types of indirection
-		// TODO: $targetNode.is("embed")) : src
-		// TODO: ($targetNode.is("object")) : data
-		// TODO: ($targetNode.is("image") || $targetNode.is("xlink:href")) : xlink:href
-	},
+    // TODO: Other types of indirection
+    // TODO: $targetNode.is("embed")) : src
+    // TODO: ($targetNode.is("object")) : data
+    // TODO: ($targetNode.is("image") || $targetNode.is("xlink:href")) : xlink:href
+  },
 
-	// Description: Injects an element at the specified text node
-	// Arguments: a cfi text termination string, a jquery object to the current node
-	// REFACTORING CANDIDATE: Rename this to indicate that it injects into a text terminus
-	textTermination : function ($currNode, textOffset, elementToInject) {
+  // Description: Injects an element at the specified text node
+  // Arguments: a cfi text termination string, a jquery object to the current node
+  // REFACTORING CANDIDATE: Rename this to indicate that it injects into a text terminus
+  textTermination: function($currNode, textOffset, elementToInject) {
 
-		var $injectedElement;
-		// Get the first node, this should be a text node
-		if ($currNode === undefined) {
+    var $injectedElement;
+    // Get the first node, this should be a text node
+    if ($currNode === undefined) {
 
-			throw NodeTypeError($currNode, "expected a terminating node, or node list");
-		} 
-		else if ($currNode.length === 0) {
+      throw NodeTypeError($currNode, "expected a terminating node, or node list");
+    } 
+    else if ($currNode.length === 0) {
 
-			throw TerminusError("Text", "Text offset:" + textOffset, "no nodes found for termination condition");
-		}
+      throw TerminusError("Text", "Text offset:" + textOffset, "no nodes found for termination condition");
+    }
 
-		$injectedElement = this.injectCFIMarkerIntoText($currNode, textOffset, elementToInject);
-		return $injectedElement;
-	},
+    $injectedElement = this.injectCFIMarkerIntoText($currNode, textOffset, elementToInject);
+    return $injectedElement;
+  },
 
-	// Description: Checks that the id assertion for the node target matches that on 
-	//   the found node. 
-	targetIdMatchesIdAssertion : function ($foundNode, idAssertion) {
+  // Description: Checks that the id assertion for the node target matches that on 
+  //   the found node. 
+  targetIdMatchesIdAssertion: function($foundNode, idAssertion) {
 
-		if ($foundNode.attr("id") === idAssertion) {
+    if ($foundNode.attr("id") === idAssertion) {
 
-			return true;
-		}
-		else {
+      return true;
+    }
+    else {
 
-			return false;
-		}
-	},
+      return false;
+    }
+  },
 
-	// ------------------------------------------------------------------------------------ //
-	//  "PRIVATE" HELPERS                                                                   //
-	// ------------------------------------------------------------------------------------ //
+  // ------------------------------------------------------------------------------------ //
+  //  "PRIVATE" HELPERS                                                                   //
+  // ------------------------------------------------------------------------------------ //
 
-	// Description: Step reference for xml element node. Expected that CFIStepValue is an even integer
-	elementNodeStep : function (CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist) {
+  // Description: Step reference for xml element node. Expected that CFIStepValue is an even integer
+  elementNodeStep: function(CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist) {
 
-		var $targetNode;
-		var $blacklistExcluded;
-		var numElements;
-		var jqueryTargetNodeIndex = (CFIStepValue / 2) - 1;
+    var $targetNode;
+    var $blacklistExcluded;
+    var numElements;
+    var jqueryTargetNodeIndex = (CFIStepValue / 2) - 1;
 
-		$blacklistExcluded = this.applyBlacklist($currNode.children(), classBlacklist, elementBlacklist, idBlacklist);
-		numElements = $blacklistExcluded.length;
+    $blacklistExcluded = this.applyBlacklist($currNode.children(), classBlacklist, elementBlacklist, idBlacklist);
+    numElements = $blacklistExcluded.length;
 
-		if (this.indexOutOfRange(jqueryTargetNodeIndex, numElements)) {
+    if (this.indexOutOfRange(jqueryTargetNodeIndex, numElements)) {
 
-			throw OutOfRangeError(jqueryTargetNodeIndex, numElements - 1, "");
-		}
+      throw OutOfRangeError(jqueryTargetNodeIndex, numElements - 1, "");
+    }
 
-	    $targetNode = $($blacklistExcluded[jqueryTargetNodeIndex]);
-		return $targetNode;
-	},
+    $targetNode = $($blacklistExcluded[jqueryTargetNodeIndex]);
+    return $targetNode;
+  },
 
-	retrieveItemRefHref : function ($itemRefElement, $packageDocument) {
+  retrieveItemRefHref: function($itemRefElement, $packageDocument) {
 
-		return $("#" + $itemRefElement.attr("idref"), $packageDocument).attr("href");
-	},
+    return $("#" + $itemRefElement.attr("idref"), $packageDocument).attr("href");
+  },
 
-	indexOutOfRange : function (targetIndex, numChildElements) {
+  indexOutOfRange: function(targetIndex, numChildElements) {
 
-		return (targetIndex > numChildElements - 1) ? true : false;
-	},
+    return (targetIndex > numChildElements - 1) ? true : false;
+  },
 
-	// Rationale: In order to inject an element into a specific position, access to the parent object 
-	//   is required. This is obtained with the jquery parent() method. An alternative would be to 
-	//   pass in the parent with a filtered list containing only children that are part of the target text node.
-    injectCFIMarkerIntoText : function ($textNodeList, textOffset, elementToInject) {
+  // Rationale: In order to inject an element into a specific position, access to the parent object 
+  //   is required. This is obtained with the jquery parent() method. An alternative would be to 
+  //   pass in the parent with a filtered list containing only children that are part of the target text node.
+  injectCFIMarkerIntoText: function($textNodeList, textOffset, elementToInject) {
 
-        var nodeNum;
-        var currNodeLength;
-        var currTextPosition = 0;
-        var nodeOffset;
-        var originalText;
-        var $injectedNode;
-        var $newTextNode;
-        // The iteration counter may be incorrect here (should be $textNodeList.length - 1 ??)
-        for (nodeNum = 0; nodeNum <= $textNodeList.length; nodeNum++) {
+    var nodeNum;
+    var currNodeLength;
+    var currTextPosition = 0;
+    var nodeOffset;
+    var originalText;
+    var $injectedNode;
+    var $newTextNode;
+    // The iteration counter may be incorrect here (should be $textNodeList.length - 1 ??)
+    for (nodeNum = 0; nodeNum <= $textNodeList.length; nodeNum++) {
 
-            if ($textNodeList[nodeNum].nodeType === 3) {
+      if ($textNodeList[nodeNum].nodeType === 3) {
 
-                currNodeMaxIndex = $textNodeList[nodeNum].nodeValue.length  + currTextPosition;
-                nodeOffset = textOffset - currTextPosition;
+        currNodeMaxIndex = $textNodeList[nodeNum].nodeValue.length  + currTextPosition;
+        nodeOffset = textOffset - currTextPosition;
 
-                if (currNodeMaxIndex > textOffset) {
+        if (currNodeMaxIndex > textOffset) {
 
-                    // This node is going to be split and the components re-inserted
-                    originalText = $textNodeList[nodeNum].nodeValue;	
+          // This node is going to be split and the components re-inserted
+          originalText = $textNodeList[nodeNum].nodeValue;	
 
-                    // Before part
-                    $textNodeList[nodeNum].nodeValue = originalText.slice(0, nodeOffset);
+          // Before part
+          $textNodeList[nodeNum].nodeValue = originalText.slice(0, nodeOffset);
 
-                    // Injected element
-                    $injectedNode = $(elementToInject).insertAfter($textNodeList.eq(nodeNum));
+          // Injected element
+          $injectedNode = $(elementToInject).insertAfter($textNodeList.eq(nodeNum));
 
-                    // After part
-                    $newTextNode = $(document.createTextNode(originalText.slice(nodeOffset, originalText.length)));
-                    $($newTextNode).insertAfter($injectedNode);
+          // After part
+          $newTextNode = $(document.createTextNode(originalText.slice(nodeOffset, originalText.length)));
+          $($newTextNode).insertAfter($injectedNode);
 
-                    return $injectedNode;
-                } else if (currNodeMaxIndex == textOffset){
-                    $injectedNode = $(elementToInject).insertAfter($textNodeList.eq(nodeNum));
-                    return $injectedNode;
-                }
-                else {
+          return $injectedNode;
+        } else if (currNodeMaxIndex == textOffset){
+          $injectedNode = $(elementToInject).insertAfter($textNodeList.eq(nodeNum));
+          return $injectedNode;
+        }
+        else {
 
-                    currTextPosition = currNodeMaxIndex;
-                }
+          currTextPosition = currNodeMaxIndex;
+        }
+      }
+    }
+
+    throw TerminusError("Text", "Text offset:" + textOffset, "The offset exceeded the length of the text");
+  },
+
+  // Rationale: In order to inject an element into a specific position, access to the parent object 
+  //   is required. This is obtained with the jquery parent() method. An alternative would be to 
+  //   pass in the parent with a filtered list containing only children that are part of the target text node.
+
+  // Description: This method finds a target text node and then injects an element into the appropriate node
+  // Rationale: The possibility that cfi marker elements have been injected into a text node at some point previous to 
+  //   this method being called (and thus splitting the original text node into two separate text nodes) necessitates that
+  //   the set of nodes that compromised the original target text node are inferred and returned.
+  // Notes: Passed a current node. This node should have a set of elements under it. This will include at least one text node, 
+  //   element nodes (maybe), or possibly a mix. 
+  // REFACTORING CANDIDATE: This method is pretty long (and confusing). Worth investigating to see if it can be refactored into something clearer.
+  inferTargetTextNode: function(CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var $elementsWithoutMarkers;
+    var currLogicalTextNodeIndex;
+    var targetLogicalTextNodeIndex;
+    var nodeNum;
+    var $targetTextNodeList;
+    var prevNodeWasTextNode;
+
+    // Remove any cfi marker elements from the set of elements. 
+    // Rationale: A filtering function is used, as simply using a class selector with jquery appears to 
+    //   result in behaviour where text nodes are also filtered out, along with the class element being filtered.
+    $elementsWithoutMarkers = this.applyBlacklist($currNode.contents(), classBlacklist, elementBlacklist, idBlacklist);
+
+    // Convert CFIStepValue to logical index; assumes odd integer for the step value
+    targetLogicalTextNodeIndex = ((parseInt(CFIStepValue) + 1) / 2) - 1;
+
+    // Set text node position counter
+    currLogicalTextNodeIndex = 0;
+    prevNodeWasTextNode = false;
+    $targetTextNodeList = $elementsWithoutMarkers.filter(
+      function() {
+
+        if (currLogicalTextNodeIndex === targetLogicalTextNodeIndex) {
+
+          // If it's a text node
+          if (this.nodeType === Node.TEXT_NODE) {
+            prevNodeWasTextNode = true;
+            return true;
+          }
+          // Rationale: The logical text node position is only incremented once a group of text nodes (a single logical
+          //   text node) has been passed by the loop. 
+          else if (prevNodeWasTextNode && (this.nodeType !== Node.TEXT_NODE)) {
+            currLogicalTextNodeIndex++;
+            prevNodeWasTextNode = false;			
+            return false;
+          }
+        }
+        // Don't return any elements
+        else {
+
+          if (this.nodeType === Node.TEXT_NODE) {
+            prevNodeWasTextNode = true;
+          }
+          else if (prevNodeWasTextNode && (this.nodeType !== Node.TEXT_NODE) && (this !== $elementsWithoutMarkers.lastChild)) {
+            currLogicalTextNodeIndex++;
+            prevNodeWasTextNode = false;
+          }
+
+          return false;
+        }
+      }
+    );
+
+    // The filtering above should have counted the number of "logical" text nodes; this can be used to 
+    // detect out of range errors
+    if ($targetTextNodeList.length === 0) {
+      throw OutOfRangeError(logicalTargetTextNodeIndex, currLogicalTextNodeIndex, "Index out of range");
+    }
+
+    // return the text node list
+    return $targetTextNodeList;
+  },
+
+  applyBlacklist: function($elements, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var $filteredElements;
+
+    $filteredElements = $elements.filter(
+      function() {
+
+        var $currElement = $(this);
+        var includeInList = true;
+
+        if (classBlacklist) {
+
+          // Filter each element with the class type
+          $.each(classBlacklist, function(index, value) {
+
+            if ($currElement.hasClass(value)) {
+              includeInList = false;
+
+              // Break this loop
+              return false;
             }
+          });
         }
 
-        throw TerminusError("Text", "Text offset:" + textOffset, "The offset exceeded the length of the text");
-    },
+        if (elementBlacklist) {
 
-	// Rationale: In order to inject an element into a specific position, access to the parent object 
-	//   is required. This is obtained with the jquery parent() method. An alternative would be to 
-	//   pass in the parent with a filtered list containing only children that are part of the target text node.
+          // For each type of element
+          $.each(elementBlacklist, function(index, value) {
 
-	// Description: This method finds a target text node and then injects an element into the appropriate node
-	// Rationale: The possibility that cfi marker elements have been injected into a text node at some point previous to 
-	//   this method being called (and thus splitting the original text node into two separate text nodes) necessitates that
-	//   the set of nodes that compromised the original target text node are inferred and returned.
-	// Notes: Passed a current node. This node should have a set of elements under it. This will include at least one text node, 
-	//   element nodes (maybe), or possibly a mix. 
-	// REFACTORING CANDIDATE: This method is pretty long (and confusing). Worth investigating to see if it can be refactored into something clearer.
-	inferTargetTextNode : function (CFIStepValue, $currNode, classBlacklist, elementBlacklist, idBlacklist) {
-		
-		var $elementsWithoutMarkers;
-		var currLogicalTextNodeIndex;
-		var targetLogicalTextNodeIndex;
-		var nodeNum;
-		var $targetTextNodeList;
-		var prevNodeWasTextNode;
+            if ($currElement.is(value)) {
+              includeInList = false;
 
-		// Remove any cfi marker elements from the set of elements. 
-		// Rationale: A filtering function is used, as simply using a class selector with jquery appears to 
-		//   result in behaviour where text nodes are also filtered out, along with the class element being filtered.
-		$elementsWithoutMarkers = this.applyBlacklist($currNode.contents(), classBlacklist, elementBlacklist, idBlacklist);
-
-		// Convert CFIStepValue to logical index; assumes odd integer for the step value
-		targetLogicalTextNodeIndex = ((parseInt(CFIStepValue) + 1) / 2) - 1;
-
-		// Set text node position counter
-		currLogicalTextNodeIndex = 0;
-		prevNodeWasTextNode = false;
-		$targetTextNodeList = $elementsWithoutMarkers.filter(
-			function () {
-
-				if (currLogicalTextNodeIndex === targetLogicalTextNodeIndex) {
-
-					// If it's a text node
-					if (this.nodeType === Node.TEXT_NODE) {
-						prevNodeWasTextNode = true;
-						return true;
-					}
-					// Rationale: The logical text node position is only incremented once a group of text nodes (a single logical
-					//   text node) has been passed by the loop. 
-					else if (prevNodeWasTextNode && (this.nodeType !== Node.TEXT_NODE)) {
-						currLogicalTextNodeIndex++;
-						prevNodeWasTextNode = false;			
-						return false;
-					}
-				}
-				// Don't return any elements
-				else {
-
-					if (this.nodeType === Node.TEXT_NODE) {
-						prevNodeWasTextNode = true;
-					}
-					else if (prevNodeWasTextNode && (this.nodeType !== Node.TEXT_NODE) && (this !== $elementsWithoutMarkers.lastChild)) {
-						currLogicalTextNodeIndex++;
-						prevNodeWasTextNode = false;
-					}
-
-					return false;
-				}
-			}
-		);
-
-		// The filtering above should have counted the number of "logical" text nodes; this can be used to 
-		// detect out of range errors
-		if ($targetTextNodeList.length === 0) {
-			throw OutOfRangeError(logicalTargetTextNodeIndex, currLogicalTextNodeIndex, "Index out of range");
-		}
-
-		// return the text node list
-		return $targetTextNodeList;
-	},
-
-	applyBlacklist : function ($elements, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var $filteredElements;
-
-        $filteredElements = $elements.filter(
-            function () {
-
-                var $currElement = $(this);
-                var includeInList = true;
-
-                if (classBlacklist) {
-
-                	// Filter each element with the class type
-                	$.each(classBlacklist, function (index, value) {
-
-	                    if ($currElement.hasClass(value)) {
-	                    	includeInList = false;
-
-	                    	// Break this loop
-	                        return false;
-	                    }
-                	});
-                }
-
-                if (elementBlacklist) {
-                	
-	                // For each type of element
-	                $.each(elementBlacklist, function (index, value) {
-
-	                    if ($currElement.is(value)) {
-	                    	includeInList = false;
-
-	                    	// Break this loop
-	                        return false;
-	                    }
-	                });
-				}
-
-				if (idBlacklist) {
-                	
-	                // For each type of element
-	                $.each(idBlacklist, function (index, value) {
-
-	                    if ($currElement.attr("id") === value) {
-	                    	includeInList = false;
-
-	                    	// Break this loop
-	                        return false;
-	                    }
-	                });
-				}
-
-                return includeInList;
+              // Break this loop
+              return false;
             }
-        );
+          });
+        }
 
-        return $filteredElements;
-    }
+        if (idBlacklist) {
+
+          // For each type of element
+          $.each(idBlacklist, function(index, value) {
+
+            if ($currElement.attr("id") === value) {
+              includeInList = false;
+
+              // Break this loop
+              return false;
+            }
+          });
+        }
+
+        return includeInList;
+      }
+    );
+
+    return $filteredElements;
+  }
 };
 
-module.exports = Instructions
+module.exports = Instructions;
 
-},{"./errors/node-type":4,"./errors/out-of-range":5,"./errors/terminus":6}],10:[function(require,module,exports){
+},{"./errors/node-type":4,"./errors/out-of-range":5,"./errors/terminus":6,"jquery":1}],10:[function(require,module,exports){
 // Description: This is an interpreter that inteprets an Abstract Syntax Tree (AST) for a CFI. The result of executing the interpreter
 //   is to inject an element, or set of elements, into an EPUB content document (which is just an XHTML document). These element(s) will
 //   represent the position or area in the EPUB referenced by a CFI.
@@ -11506,360 +11505,360 @@ module.exports = Instructions
 // REFACTORING CANDIDATE: The use of the 'nodeType' property is confusing as this is a DOM node property and the two are unrelated. 
 //   Whoops. There shouldn't be any interference, however, I think this should be changed. 
 
-var $ = require('jquery')
-var CFIAssertionError = require('./errors/cfi-assertion')
-var Instructions = require('./instructions')
-var NodeTypeError = require('./errors/node-type')
-var Parser = require('./parser')
+var $ = require('jquery');
+var CFIAssertionError = require('./errors/cfi-assertion');
+var Instructions = require('./instructions');
+var NodeTypeError = require('./errors/node-type');
+var Parser = require('./parser');
 
 var Interpreter = {
 
-    // ------------------------------------------------------------------------------------ //
-    //  "PUBLIC" METHODS (THE API)                                                          //
-    // ------------------------------------------------------------------------------------ //
-
-    // Description: Find the content document referenced by the spine item. This should be the spine item 
-    //   referenced by the first indirection step in the CFI.
-    // Rationale: This method is a part of the API so that the reading system can "interact" the content document 
-    //   pointed to by a CFI. If this is not a separate step, the processing of the CFI must be tightly coupled with 
-    //   the reading system, as it stands now. 
-    getContentDocHref : function (CFI, packageDocument, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var $packageDocument = $(packageDocument);
-        var decodedCFI = decodeURI(CFI);
-        var CFIAST = Parser.parse(decodedCFI);
-
-        if (!CFIAST || CFIAST.type !== "CFIAST") { 
-            throw NodeTypeError(CFIAST, "expected CFI AST root node");
-        }
-
-        // Interpet the path node (the package document step)
-        var $packageElement = $($("package", $packageDocument)[0]);
-        var $currElement = this.interpretIndexStepNode(CFIAST.cfiString.path, $packageElement, classBlacklist, elementBlacklist, idBlacklist);
-        foundHref = this.searchLocalPathForHref($currElement, $packageDocument, CFIAST.cfiString.localPath, classBlacklist, elementBlacklist, idBlacklist);
-
-        if (foundHref) {
-            return foundHref;
-        }
-        else {
-            return undefined;
-        }
-    },
-
-    // Description: Inject an arbitrary html element into a position in a content document referenced by a CFI
-    injectElement : function (CFI, contentDocument, elementToInject, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var decodedCFI = decodeURI(CFI);
-        var CFIAST = Parser.parse(decodedCFI);
-        var indirectionNode;
-        var indirectionStepNum;
-        var $currElement;
-
-        // Rationale: Since the correct content document for this CFI is already being passed, we can skip to the beginning 
-        //   of the indirection step that referenced the content document.
-        // Note: This assumes that indirection steps and index steps conform to an interface: an object with stepLength, idAssertion
-        indirectionStepNum = this.getFirstIndirectionStepNum(CFIAST);
-        indirectionNode = CFIAST.cfiString.localPath.steps[indirectionStepNum];
-        indirectionNode.type = "indexStep";
-
-        // Interpret the rest of the steps
-        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
-
-        // TODO: detect what kind of terminus; for now, text node termini are the only kind implemented
-        $currElement = this.interpretTextTerminusNode(CFIAST.cfiString.localPath.termStep, $currElement, elementToInject);
-
-        // Return the element that was injected into
-        return $currElement;
-    },
-
-    // Description: Inject an arbitrary html element into a position in a content document referenced by a CFI
-    injectRangeElements : function (rangeCFI, contentDocument, startElementToInject, endElementToInject, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var decodedCFI = decodeURI(rangeCFI);
-        var CFIAST = Parser.parse(decodedCFI);
-        var indirectionNode;
-        var indirectionStepNum;
-        var $currElement;
-        var $range1TargetElement;
-        var $range2TargetElement;
-
-        // Rationale: Since the correct content document for this CFI is already being passed, we can skip to the beginning 
-        //   of the indirection step that referenced the content document.
-        // Note: This assumes that indirection steps and index steps conform to an interface: an object with stepLength, idAssertion
-        indirectionStepNum = this.getFirstIndirectionStepNum(CFIAST);
-        indirectionNode = CFIAST.cfiString.localPath.steps[indirectionStepNum];
-        indirectionNode.type = "indexStep";
-
-        // Interpret the rest of the steps in the first local path
-        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
-
-        // Interpret the first range local_path
-        $range1TargetElement = this.interpretLocalPath(CFIAST.cfiString.range1, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
-        $range1TargetElement = this.interpretTextTerminusNode(CFIAST.cfiString.range1.termStep, $range1TargetElement, startElementToInject);
-
-        // Interpret the second range local_path
-        $range2TargetElement = this.interpretLocalPath(CFIAST.cfiString.range2, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
-        $range2TargetElement = this.interpretTextTerminusNode(CFIAST.cfiString.range2.termStep, $range2TargetElement, endElementToInject);
-
-        // Return the element that was injected into
-        return {
-            startElement : $range1TargetElement[0],
-            endElement : $range2TargetElement[0]
-        };
-    },
-
-    // Description: This method will return the element or node (say, a text node) that is the final target of the 
-    //   the CFI.
-    getTargetElement : function (CFI, contentDocument, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var decodedCFI = decodeURI(CFI);
-        var CFIAST = Parser.parse(decodedCFI);
-        var indirectionNode;
-        var indirectionStepNum;
-        var $currElement;
-        
-        // Rationale: Since the correct content document for this CFI is already being passed, we can skip to the beginning 
-        //   of the indirection step that referenced the content document.
-        // Note: This assumes that indirection steps and index steps conform to an interface: an object with stepLength, idAssertion
-        indirectionStepNum = this.getFirstIndirectionStepNum(CFIAST);
-        indirectionNode = CFIAST.cfiString.localPath.steps[indirectionStepNum];
-        indirectionNode.type = "indexStep";
-
-        // Interpret the rest of the steps
-        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
-
-        // Return the element at the end of the CFI
-        return $currElement;
-    },
-
-    getRangeTargetElements : function (rangeCFI, contentDocument, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var decodedCFI = decodeURI(rangeCFI);
-        var CFIAST = Parser.parse(decodedCFI);
-        var indirectionNode;
-        var indirectionStepNum;
-        var $currElement;
-        var $range1TargetElement;
-        var $range2TargetElement;
-        
-        // Rationale: Since the correct content document for this CFI is already being passed, we can skip to the beginning 
-        //   of the indirection step that referenced the content document.
-        // Note: This assumes that indirection steps and index steps conform to an interface: an object with stepLength, idAssertion
-        indirectionStepNum = this.getFirstIndirectionStepNum(CFIAST);
-        indirectionNode = CFIAST.cfiString.localPath.steps[indirectionStepNum];
-        indirectionNode.type = "indexStep";
-
-        // Interpret the rest of the steps
-        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
-
-        // Interpret first range local_path
-        $range1TargetElement = this.interpretLocalPath(CFIAST.cfiString.range1, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
-
-        // Interpret second range local_path
-        $range2TargetElement = this.interpretLocalPath(CFIAST.cfiString.range2, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
-
-        // Return the element at the end of the CFI
-        return {
-            startElement : $range1TargetElement[0],
-            endElement : $range2TargetElement[0]
-        };
-    },
-
-    // Description: This method allows a "partial" CFI to be used to reference a target in a content document, without a 
-    //   package document CFI component. 
-    // Arguments: {
-    //     contentDocumentCFI : This is a partial CFI that represents a path in a content document only. This partial must be 
-    //        syntactically valid, even though it references a path starting at the top of a content document (which is a CFI that
-    //        that has no defined meaning in the spec.)
-    //     contentDocument : A DOM representation of the content document to which the partial CFI refers. 
-    // }
-    // Rationale: This method exists to meet the requirements of the Readium-SDK and should be used with care
-    getTargetElementWithPartialCFI : function (contentDocumentCFI, contentDocument, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var decodedCFI = decodeURI(contentDocumentCFI);
-        var CFIAST = Parser.parse(decodedCFI);
-        var indirectionNode;
-        
-        // Interpret the path node 
-        var $currElement = this.interpretIndexStepNode(CFIAST.cfiString.path, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
-
-        // Interpret the rest of the steps
-        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
-
-        // Return the element at the end of the CFI
-        return $currElement;        
-    },
-
-    // Description: This method allows a "partial" CFI to be used, with a content document, to return the text node and offset 
-    //    referenced by the partial CFI.
-    // Arguments: {
-    //     contentDocumentCFI : This is a partial CFI that represents a path in a content document only. This partial must be 
-    //        syntactically valid, even though it references a path starting at the top of a content document (which is a CFI that
-    //        that has no defined meaning in the spec.)
-    //     contentDocument : A DOM representation of the content document to which the partial CFI refers. 
-    // }
-    // Rationale: This method exists to meet the requirements of the Readium-SDK and should be used with care
-    getTextTerminusInfoWithPartialCFI : function (contentDocumentCFI, contentDocument, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var decodedCFI = decodeURI(contentDocumentCFI);
-        var CFIAST = Parser.parse(decodedCFI);
-        var indirectionNode;
-        var textOffset;
-        
-        // Interpret the path node 
-        var $currElement = this.interpretIndexStepNode(CFIAST.cfiString.path, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
-
-        // Interpret the rest of the steps
-        $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
-
-        // Return the element at the end of the CFI
-        textOffset = parseInt(CFIAST.cfiString.localPath.termStep.offsetValue);
-        return { textNode : $currElement,
-                 textOffset : textOffset
-            };
-    },
-
-    // ------------------------------------------------------------------------------------ //
-    //  "PRIVATE" HELPERS                                                                   //
-    // ------------------------------------------------------------------------------------ //
-
-    getFirstIndirectionStepNum : function (CFIAST) {
-
-        // Find the first indirection step in the local path; follow it like a regular step, as the step in the content document it 
-        //   references is already loaded and has been passed to this method
-        var stepNum = 0;
-        for (stepNum; stepNum <= CFIAST.cfiString.localPath.steps.length - 1 ; stepNum++) {
-        
-            nextStepNode = CFIAST.cfiString.localPath.steps[stepNum];
-            if (nextStepNode.type === "indirectionStep") {
-                return stepNum;
-            }
-        }
-    },
-
-    // REFACTORING CANDIDATE: cfiString node and start step num could be merged into one argument, by simply passing the 
-    //   starting step... probably a good idea, this would make the meaning of this method clearer.
-    interpretLocalPath : function (localPathNode, startStepNum, $currElement, classBlacklist, elementBlacklist, idBlacklist) {
-
-        var stepNum = startStepNum;
-        var nextStepNode;
-        for (stepNum; stepNum <= localPathNode.steps.length - 1 ; stepNum++) {
-        
-            nextStepNode = localPathNode.steps[stepNum];
-            if (nextStepNode.type === "indexStep") {
-
-                $currElement = this.interpretIndexStepNode(nextStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist);
-            }
-            else if (nextStepNode.type === "indirectionStep") {
-
-                $currElement = this.interpretIndirectionStepNode(nextStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist);
-            }
-        }
-
-        return $currElement;
-    },
-
-    interpretIndexStepNode : function (indexStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist) {
-
-        // Check node type; throw error if wrong type
-        if (indexStepNode === undefined || indexStepNode.type !== "indexStep") {
-
-            throw NodeTypeError(indexStepNode, "expected index step node");
-        }
-
-        // Index step
-        var $stepTarget = Instructions.getNextNode(indexStepNode.stepLength, $currElement, classBlacklist, elementBlacklist, idBlacklist);
-
-        // Check the id assertion, if it exists
-        if (indexStepNode.idAssertion) {
-
-            if (!Instructions.targetIdMatchesIdAssertion($stepTarget, indexStepNode.idAssertion)) {
-
-                throw CFIAssertionError(indexStepNode.idAssertion, $stepTarget.attr('id'), "Id assertion failed");
-            }
-        }
-
-        return $stepTarget;
-    },
-
-    interpretIndirectionStepNode : function (indirectionStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist) {
-
-        // Check node type; throw error if wrong type
-        if (indirectionStepNode === undefined || indirectionStepNode.type !== "indirectionStep") {
-
-            throw NodeTypeError(indirectionStepNode, "expected indirection step node");
-        }
-
-        // Indirection step
-        var $stepTarget = Instructions.followIndirectionStep(
-            indirectionStepNode.stepLength, 
-            $currElement, 
-            classBlacklist, 
-            elementBlacklist);
-
-        // Check the id assertion, if it exists
-        if (indirectionStepNode.idAssertion) {
-
-            if (!Instructions.targetIdMatchesIdAssertion($stepTarget, indirectionStepNode.idAssertion)) {
-
-                throw CFIAssertionError(indirectionStepNode.idAssertion, $stepTarget.attr('id'), "Id assertion failed");
-            }
-        }
-
-        return $stepTarget;
-    },
-
-    // REFACTORING CANDIDATE: The logic here assumes that a user will always want to use this terminus
-    //   to inject content into the found node. This will not always be the case, and different types of interpretation
-    //   are probably desired. 
-    interpretTextTerminusNode : function (terminusNode, $currElement, elementToInject) {
-
-        if (terminusNode === undefined || terminusNode.type !== "textTerminus") {
-
-            throw NodeTypeError(terminusNode, "expected text terminus node");
-        }
-
-        var $injectedElement = Instructions.textTermination(
-            $currElement, 
-            terminusNode.offsetValue, 
-            elementToInject
-            );
-
-        return $injectedElement;
-    },
-
-    searchLocalPathForHref : function ($currElement, $packageDocument, localPathNode, classBlacklist, elementBlacklist, idBlacklist) {
-
-        // Interpret the first local_path node, which is a set of steps and and a terminus condition
-        var stepNum = 0;
-        var nextStepNode;
-        for (stepNum = 0 ; stepNum <= localPathNode.steps.length - 1 ; stepNum++) {
-        
-            nextStepNode = localPathNode.steps[stepNum];
-            if (nextStepNode.type === "indexStep") {
-                
-                $currElement = this.interpretIndexStepNode(nextStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist);
-            }
-            else if (nextStepNode.type === "indirectionStep") {
-
-                $currElement = this.interpretIndirectionStepNode(nextStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist);
-            }
-
-            // Found the content document href referenced by the spine item 
-            if ($currElement.is("itemref")) {
-
-                return Instructions.retrieveItemRefHref($currElement, $packageDocument);
-            }
-        }
-
-        return undefined;
+  // ------------------------------------------------------------------------------------ //
+  //  "PUBLIC" METHODS (THE API)                                                          //
+  // ------------------------------------------------------------------------------------ //
+
+  // Description: Find the content document referenced by the spine item. This should be the spine item 
+  //   referenced by the first indirection step in the CFI.
+  // Rationale: This method is a part of the API so that the reading system can "interact" the content document 
+  //   pointed to by a CFI. If this is not a separate step, the processing of the CFI must be tightly coupled with 
+  //   the reading system, as it stands now. 
+  getContentDocHref: function(CFI, packageDocument, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var $packageDocument = $(packageDocument);
+    var decodedCFI = decodeURI(CFI);
+    var CFIAST = Parser.parse(decodedCFI);
+
+    if (!CFIAST || CFIAST.type !== "CFIAST") { 
+      throw NodeTypeError(CFIAST, "expected CFI AST root node");
     }
+
+    // Interpet the path node (the package document step)
+    var $packageElement = $($("package", $packageDocument)[0]);
+    var $currElement = this.interpretIndexStepNode(CFIAST.cfiString.path, $packageElement, classBlacklist, elementBlacklist, idBlacklist);
+    foundHref = this.searchLocalPathForHref($currElement, $packageDocument, CFIAST.cfiString.localPath, classBlacklist, elementBlacklist, idBlacklist);
+
+    if (foundHref) {
+      return foundHref;
+    }
+    else {
+      return undefined;
+    }
+  },
+
+  // Description: Inject an arbitrary html element into a position in a content document referenced by a CFI
+  injectElement: function(CFI, contentDocument, elementToInject, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var decodedCFI = decodeURI(CFI);
+    var CFIAST = Parser.parse(decodedCFI);
+    var indirectionNode;
+    var indirectionStepNum;
+    var $currElement;
+
+    // Rationale: Since the correct content document for this CFI is already being passed, we can skip to the beginning 
+    //   of the indirection step that referenced the content document.
+    // Note: This assumes that indirection steps and index steps conform to an interface: an object with stepLength, idAssertion
+    indirectionStepNum = this.getFirstIndirectionStepNum(CFIAST);
+    indirectionNode = CFIAST.cfiString.localPath.steps[indirectionStepNum];
+    indirectionNode.type = "indexStep";
+
+    // Interpret the rest of the steps
+    $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+
+    // TODO: detect what kind of terminus; for now, text node termini are the only kind implemented
+    $currElement = this.interpretTextTerminusNode(CFIAST.cfiString.localPath.termStep, $currElement, elementToInject);
+
+    // Return the element that was injected into
+    return $currElement;
+  },
+
+  // Description: Inject an arbitrary html element into a position in a content document referenced by a CFI
+  injectRangeElements: function(rangeCFI, contentDocument, startElementToInject, endElementToInject, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var decodedCFI = decodeURI(rangeCFI);
+    var CFIAST = Parser.parse(decodedCFI);
+    var indirectionNode;
+    var indirectionStepNum;
+    var $currElement;
+    var $range1TargetElement;
+    var $range2TargetElement;
+
+    // Rationale: Since the correct content document for this CFI is already being passed, we can skip to the beginning 
+    //   of the indirection step that referenced the content document.
+    // Note: This assumes that indirection steps and index steps conform to an interface: an object with stepLength, idAssertion
+    indirectionStepNum = this.getFirstIndirectionStepNum(CFIAST);
+    indirectionNode = CFIAST.cfiString.localPath.steps[indirectionStepNum];
+    indirectionNode.type = "indexStep";
+
+    // Interpret the rest of the steps in the first local path
+    $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+
+    // Interpret the first range local_path
+    $range1TargetElement = this.interpretLocalPath(CFIAST.cfiString.range1, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
+    $range1TargetElement = this.interpretTextTerminusNode(CFIAST.cfiString.range1.termStep, $range1TargetElement, startElementToInject);
+
+    // Interpret the second range local_path
+    $range2TargetElement = this.interpretLocalPath(CFIAST.cfiString.range2, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
+    $range2TargetElement = this.interpretTextTerminusNode(CFIAST.cfiString.range2.termStep, $range2TargetElement, endElementToInject);
+
+    // Return the element that was injected into
+    return {
+      startElement : $range1TargetElement[0],
+      endElement : $range2TargetElement[0]
+    };
+  },
+
+  // Description: This method will return the element or node (say, a text node) that is the final target of the 
+  //   the CFI.
+  getTargetElement: function(CFI, contentDocument, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var decodedCFI = decodeURI(CFI);
+    var CFIAST = Parser.parse(decodedCFI);
+    var indirectionNode;
+    var indirectionStepNum;
+    var $currElement;
+
+    // Rationale: Since the correct content document for this CFI is already being passed, we can skip to the beginning 
+    //   of the indirection step that referenced the content document.
+    // Note: This assumes that indirection steps and index steps conform to an interface: an object with stepLength, idAssertion
+    indirectionStepNum = this.getFirstIndirectionStepNum(CFIAST);
+    indirectionNode = CFIAST.cfiString.localPath.steps[indirectionStepNum];
+    indirectionNode.type = "indexStep";
+
+    // Interpret the rest of the steps
+    $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+
+    // Return the element at the end of the CFI
+    return $currElement;
+  },
+
+  getRangeTargetElements: function(rangeCFI, contentDocument, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var decodedCFI = decodeURI(rangeCFI);
+    var CFIAST = Parser.parse(decodedCFI);
+    var indirectionNode;
+    var indirectionStepNum;
+    var $currElement;
+    var $range1TargetElement;
+    var $range2TargetElement;
+
+    // Rationale: Since the correct content document for this CFI is already being passed, we can skip to the beginning 
+    //   of the indirection step that referenced the content document.
+    // Note: This assumes that indirection steps and index steps conform to an interface: an object with stepLength, idAssertion
+    indirectionStepNum = this.getFirstIndirectionStepNum(CFIAST);
+    indirectionNode = CFIAST.cfiString.localPath.steps[indirectionStepNum];
+    indirectionNode.type = "indexStep";
+
+    // Interpret the rest of the steps
+    $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, indirectionStepNum, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+
+    // Interpret first range local_path
+    $range1TargetElement = this.interpretLocalPath(CFIAST.cfiString.range1, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
+
+    // Interpret second range local_path
+    $range2TargetElement = this.interpretLocalPath(CFIAST.cfiString.range2, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
+
+    // Return the element at the end of the CFI
+    return {
+      startElement : $range1TargetElement[0],
+      endElement : $range2TargetElement[0]
+    };
+  },
+
+  // Description: This method allows a "partial" CFI to be used to reference a target in a content document, without a 
+  //   package document CFI component. 
+  // Arguments: {
+  //     contentDocumentCFI : This is a partial CFI that represents a path in a content document only. This partial must be 
+  //        syntactically valid, even though it references a path starting at the top of a content document (which is a CFI that
+  //        that has no defined meaning in the spec.)
+  //     contentDocument : A DOM representation of the content document to which the partial CFI refers. 
+  // }
+  // Rationale: This method exists to meet the requirements of the Readium-SDK and should be used with care
+  getTargetElementWithPartialCFI: function(contentDocumentCFI, contentDocument, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var decodedCFI = decodeURI(contentDocumentCFI);
+    var CFIAST = Parser.parse(decodedCFI);
+    var indirectionNode;
+
+    // Interpret the path node 
+    var $currElement = this.interpretIndexStepNode(CFIAST.cfiString.path, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+
+    // Interpret the rest of the steps
+    $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
+
+    // Return the element at the end of the CFI
+    return $currElement;        
+  },
+
+  // Description: This method allows a "partial" CFI to be used, with a content document, to return the text node and offset 
+  //    referenced by the partial CFI.
+  // Arguments: {
+  //     contentDocumentCFI : This is a partial CFI that represents a path in a content document only. This partial must be 
+  //        syntactically valid, even though it references a path starting at the top of a content document (which is a CFI that
+  //        that has no defined meaning in the spec.)
+  //     contentDocument : A DOM representation of the content document to which the partial CFI refers. 
+  // }
+  // Rationale: This method exists to meet the requirements of the Readium-SDK and should be used with care
+  getTextTerminusInfoWithPartialCFI: function(contentDocumentCFI, contentDocument, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var decodedCFI = decodeURI(contentDocumentCFI);
+    var CFIAST = Parser.parse(decodedCFI);
+    var indirectionNode;
+    var textOffset;
+
+    // Interpret the path node 
+    var $currElement = this.interpretIndexStepNode(CFIAST.cfiString.path, $("html", contentDocument), classBlacklist, elementBlacklist, idBlacklist);
+
+    // Interpret the rest of the steps
+    $currElement = this.interpretLocalPath(CFIAST.cfiString.localPath, 0, $currElement, classBlacklist, elementBlacklist, idBlacklist);
+
+    // Return the element at the end of the CFI
+    textOffset = parseInt(CFIAST.cfiString.localPath.termStep.offsetValue);
+    return { textNode : $currElement,
+      textOffset : textOffset
+    };
+  },
+
+  // ------------------------------------------------------------------------------------ //
+  //  "PRIVATE" HELPERS                                                                   //
+  // ------------------------------------------------------------------------------------ //
+
+  getFirstIndirectionStepNum: function(CFIAST) {
+
+    // Find the first indirection step in the local path; follow it like a regular step, as the step in the content document it 
+    //   references is already loaded and has been passed to this method
+    var stepNum = 0;
+    for (stepNum; stepNum <= CFIAST.cfiString.localPath.steps.length - 1 ; stepNum++) {
+
+      nextStepNode = CFIAST.cfiString.localPath.steps[stepNum];
+      if (nextStepNode.type === "indirectionStep") {
+        return stepNum;
+      }
+    }
+  },
+
+  // REFACTORING CANDIDATE: cfiString node and start step num could be merged into one argument, by simply passing the 
+  //   starting step... probably a good idea, this would make the meaning of this method clearer.
+  interpretLocalPath: function(localPathNode, startStepNum, $currElement, classBlacklist, elementBlacklist, idBlacklist) {
+
+    var stepNum = startStepNum;
+    var nextStepNode;
+    for (stepNum; stepNum <= localPathNode.steps.length - 1 ; stepNum++) {
+
+      nextStepNode = localPathNode.steps[stepNum];
+      if (nextStepNode.type === "indexStep") {
+
+        $currElement = this.interpretIndexStepNode(nextStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist);
+      }
+      else if (nextStepNode.type === "indirectionStep") {
+
+        $currElement = this.interpretIndirectionStepNode(nextStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist);
+      }
+    }
+
+    return $currElement;
+  },
+
+  interpretIndexStepNode: function(indexStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist) {
+
+    // Check node type; throw error if wrong type
+    if (indexStepNode === undefined || indexStepNode.type !== "indexStep") {
+
+      throw NodeTypeError(indexStepNode, "expected index step node");
+    }
+
+    // Index step
+    var $stepTarget = Instructions.getNextNode(indexStepNode.stepLength, $currElement, classBlacklist, elementBlacklist, idBlacklist);
+
+    // Check the id assertion, if it exists
+    if (indexStepNode.idAssertion) {
+
+      if (!Instructions.targetIdMatchesIdAssertion($stepTarget, indexStepNode.idAssertion)) {
+
+        throw CFIAssertionError(indexStepNode.idAssertion, $stepTarget.attr('id'), "Id assertion failed");
+      }
+    }
+
+    return $stepTarget;
+  },
+
+  interpretIndirectionStepNode: function(indirectionStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist) {
+
+    // Check node type; throw error if wrong type
+    if (indirectionStepNode === undefined || indirectionStepNode.type !== "indirectionStep") {
+
+      throw NodeTypeError(indirectionStepNode, "expected indirection step node");
+    }
+
+    // Indirection step
+    var $stepTarget = Instructions.followIndirectionStep(
+      indirectionStepNode.stepLength, 
+      $currElement, 
+      classBlacklist, 
+      elementBlacklist);
+
+      // Check the id assertion, if it exists
+      if (indirectionStepNode.idAssertion) {
+
+        if (!Instructions.targetIdMatchesIdAssertion($stepTarget, indirectionStepNode.idAssertion)) {
+
+          throw CFIAssertionError(indirectionStepNode.idAssertion, $stepTarget.attr('id'), "Id assertion failed");
+        }
+      }
+
+      return $stepTarget;
+  },
+
+  // REFACTORING CANDIDATE: The logic here assumes that a user will always want to use this terminus
+  //   to inject content into the found node. This will not always be the case, and different types of interpretation
+  //   are probably desired. 
+  interpretTextTerminusNode: function(terminusNode, $currElement, elementToInject) {
+
+    if (terminusNode === undefined || terminusNode.type !== "textTerminus") {
+
+      throw NodeTypeError(terminusNode, "expected text terminus node");
+    }
+
+    var $injectedElement = Instructions.textTermination(
+      $currElement, 
+      terminusNode.offsetValue, 
+      elementToInject
+    );
+
+    return $injectedElement;
+  },
+
+  searchLocalPathForHref: function($currElement, $packageDocument, localPathNode, classBlacklist, elementBlacklist, idBlacklist) {
+
+    // Interpret the first local_path node, which is a set of steps and and a terminus condition
+    var stepNum = 0;
+    var nextStepNode;
+    for (stepNum = 0 ; stepNum <= localPathNode.steps.length - 1 ; stepNum++) {
+
+      nextStepNode = localPathNode.steps[stepNum];
+      if (nextStepNode.type === "indexStep") {
+
+        $currElement = this.interpretIndexStepNode(nextStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist);
+      }
+      else if (nextStepNode.type === "indirectionStep") {
+
+        $currElement = this.interpretIndirectionStepNode(nextStepNode, $currElement, classBlacklist, elementBlacklist, idBlacklist);
+      }
+
+      // Found the content document href referenced by the spine item 
+      if ($currElement.is("itemref")) {
+
+        return Instructions.retrieveItemRefHref($currElement, $packageDocument);
+      }
+    }
+
+    return undefined;
+  }
 };
 
-module.exports = Interpreter
+module.exports = Interpreter;
 
 },{"./errors/cfi-assertion":3,"./errors/node-type":4,"./instructions":9,"./parser":11,"jquery":1}],11:[function(require,module,exports){
 // Thin wrapper around the parser's generated file
-module.exports = require('../parser/epub-cfi.js')
+module.exports = require('../parser/epub-cfi.js');
 
 },{"../parser/epub-cfi.js":2}]},{},[8]);

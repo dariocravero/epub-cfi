@@ -1,6 +1,6 @@
 {
   "name": "epub-cfi",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "epub-cfi",
   "main": "src/index.js",
   "readme": "README.md",

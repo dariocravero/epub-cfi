@@ -1,6 +1,6 @@
-var generator     = require('./generator');
-var instructions  = require('./instructions');
-var interpreter   = require('./interpreter');
+var generator = require('./generator');
+var instructions = require('./instructions');
+var interpreter = require('./interpreter');
 
 function generateCharacterOffsetCFIComponent(startTextNode, characterOffset, classBlacklist, elementBlacklist, idBlacklist) {
   return generator.generateCharacterOffsetCFIComponent(startTextNode, characterOffset, classBlacklist, elementBlacklist, idBlacklist);
@@ -78,4 +78,4 @@ module.exports = {
   injectElement: injectElement,
   injectElementAtOffset: injectElementAtOffset,
   injectRangeElements: injectRangeElements
-}
+};
