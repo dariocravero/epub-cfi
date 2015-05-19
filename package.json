@@ -1,6 +1,6 @@
 {
-  "name": "epub-cfi",
-  "version": "0.0.2",
+  "name": "@hmh/epub-cfi",
+  "version": "0.1.0',
   "description": "epub-cfi",
   "main": "src/index.js",
   "readme": "README.md",
@@ -12,7 +12,7 @@
   "devDependencies": {
     "browserify": "^8.1.1",
     "envify": "^3.2.0",
-    "pegjs": "^0.8.0",
+    "pegjs": "^0.7.0",
     "uglify-js": "~2.4.16"
   },
   "scripts": {
